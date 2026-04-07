@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Password Manager - QR Session</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    /* Основной контейнер */
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 500px;
+      width: 100%;
+      padding: 40px 30px;
+      transition: all 0.3s ease;
+    }
+
+    /* Заголовки */
+    h1 {
+      font-size: 28px;
+      color: #333;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+
+    /* QR секция */
+    .qr-section {
+      text-align: center;
+      margin: 20px 0;
+    }
+
+    #qrcode {
+      display: inline-block;
+      padding: 20px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+
+    .qr-info {
+      margin-top: 20px;
+      color: #666;
+      font-size: 13px;
+      background: #f8f9fa;
+      padding: 12px;
+      border-radius: 8px;
+    }
+
+    .qr-info code {
+      background: #e9ecef;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      word-break: break-all;
+    }
+
+    /* Кнопки */
+    .btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      width: 100%;
+      font-weight: 600;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .btn-secondary {
+      background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+      margin-top: 15px;
+    }
+
+    /* Список паролей */
+    .credentials-list {
+      margin-top: 25px;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+
+    .credential-card {
+      background: #f8f9fa;
+      border-radius: 12px;
+      padding: 15px;
+      margin-bottom: 15px;
+      transition: all 0.2s;
+      border: 1px solid #e9ecef;
+    }
+
+    .credential-card:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      transform: translateX(3px);
+    }
+
+    /* Строка логина/пароля */
+    .field-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #dee2e6;
+    }
+
+    .field-row:last-child {
+      border-bottom: none;
+    }
+
+    .field-label {
+      font-weight: 600;
+      color: #495057;
+      min-width: 60px;
+      font-size: 14px;
+    }
+
+    .field-value {
+      flex: 1;
+      margin: 0 10px;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      filter: blur(5px);
+      transition: filter 0.2s;
+      cursor: pointer;
+      user-select: none;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: #e9ecef;
+    }
+
+    .field-value:hover {
+      filter: blur(0);
+      background: #fff;
+    }
+
+    .copy-btn {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: background 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: #45a049;
+    }
+
+    /* Счетчик */
+    .counter {
+      background: #667eea;
+      color: white;
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      display: inline-block;
+      margin-bottom: 15px;
+    }
+
+    /* Страница ошибки */
+    .error-section {
+      text-align: center;
+    }
+
+    .error-icon {
+      font-size: 64px;
+      margin-bottom: 20px;
+    }
+
+    .error-message {
+      background: #f8d7da;
+      color: #721c24;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px 0;
+      border-left: 4px solid #dc3545;
+      text-align: left;
+    }
+
+    /* Скрытие элементов */
+    .hidden {
+      display: none;
+    }
+
+    /* Анимация загрузки */
+    .loading {
+      text-align: center;
+      padding: 40px;
+    }
+
+    .spinner {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #667eea;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 15px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container" id="app">
+  <!-- Страница 1: Сканирование QR -->
+  <div id="scanPage">
+    <h1>Сканируйте QR-код</h1>
+    <div class="subtitle">Откройте мобильное приложение и отсканируйте код</div>
+    
+    <div class="qr-section">
+      <div id="qrcode"></div>
+    </div>
+
+    <button class="btn" id="simulateScanBtn">
+        Сканирование
+    </button>
+  </div>
+
+  <!-- Страница 2: Список паролей -->
+  <div id="passwordsPage" class="hidden">
+    <h1> Мои пароли</h1>
+    <div class="subtitle" id="passwordsSubtitle">Загружено из приложения</div>
+    
+    <div class="credentials-list" id="credentialsList"></div>
+    
+    <button class="btn btn-secondary" id="backToScanBtn">
+      ← Вернуться к сканированию
+    </button>
+  </div>
+
+  <!-- Страница 3: Ошибка -->
+  <div id="errorPage" class="hidden">
+    <div class="error-section">
+      <div class="error-icon">⚠️</div>
+      <h1>Ошибка</h1>
+      <div class="error-message" id="errorMessage">
+        Произошла неизвестная ошибка
+      </div>
+      <button class="btn" id="retryBtn">
+        🔄 Попробовать снова
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<script>
+  // ==================== КОНФИГУРАЦИЯ ДЛЯ СЕРВЕРА ====================
+  // 🔧 НАСТРОЙКИ ДЛЯ РЕАЛЬНОГО СЕРВЕРА:
+  // 1. Замените IP на реальный адрес вашего сервера
+  // 2. Сервер должен обрабатывать POST /request?session=ID
+  // 3. Сервер должен хранить полученные данные по сессии
+  // 4. Для получения данных используйте GET /get?session=ID
+  
+  const SERVER_CONFIG = {
+    // 🔄 ИЗМЕНИТЕ ЭТОТ IP НА РЕАЛЬНЫЙ IP ВАШЕГО СЕРВЕРА
+    baseUrl: "http://192.168.1.100:8080",
+    
+    // Пути для API
+    endpoints: {
+      receiveData: "/request",     // POST - получение данных от приложения
+      getData: "/get"             // GET - получение всех данных по сессии
+    },
+    
+    // Таймауты
+    timeout: 5000,
+    
+    // Интервал опроса сервера (в миллисекундах)
+    pollInterval: 2000
+  };
+  
+  // Глобальные переменные
+  let sessionId = generateSessionId(); // Уникальный ID сессии
+  let pollTimer = null;                // Таймер опроса сервера
+  let credentials = [];                // Массив с паролями {login, password}
+  
+  // DOM элементы
+  const scanPage = document.getElementById('scanPage');
+  const passwordsPage = document.getElementById('passwordsPage');
+  const errorPage = document.getElementById('errorPage');
+  const credentialsList = document.getElementById('credentialsList');
+  const errorMessageEl = document.getElementById('errorMessage');
+  
+  // ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
+  
+  // Генерация случайного ID сессии
+  function generateSessionId() {
+    return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+  }
+  
+  // Показать страницу ошибки
+  function showError(message) {
+    stopPolling();
+    scanPage.classList.add('hidden');
+    passwordsPage.classList.add('hidden');
+    errorPage.classList.remove('hidden');
+    errorMessageEl.textContent = message;
+  }
+  
+  // Показать страницу сканирования
+  function showScanPage() {
+    stopPolling();
+    scanPage.classList.remove('hidden');
+    passwordsPage.classList.add('hidden');
+    errorPage.classList.add('hidden');
+    
+    // Генерируем новый sessionId при возврате
+    if (!pollTimer) {
+      sessionId = generateSessionId();
+      generateQRCode();
+    }
+  }
+  
+  // Показать страницу с паролями
+  function showPasswordsPage() {
+    scanPage.classList.add('hidden');
+    passwordsPage.classList.remove('hidden');
+    errorPage.classList.add('hidden');
+    renderCredentials();
+  }
+  
+  // Остановка опроса сервера
+  function stopPolling() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+  
+  // ==================== РАБОТА С QR-КОДОМ ====================
+  
+  // Генерация QR-кода с актуальной сессией
+  function generateQRCode() {
+    const qrUrl = `${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.endpoints.receiveData}?session=${sessionId}`;
+    
+    // Показываем URL в интерфейсе (для отладки)
+    const qrUrlDisplay = document.getElementById('qrUrlDisplay');
+    if (qrUrlDisplay) {
+      qrUrlDisplay.textContent = qrUrl;
+    }
+    
+    // Очищаем старый QR
+    const qrContainer = document.getElementById('qrcode');
+    qrContainer.innerHTML = '';
+    
+    // Создаем новый QR
+    try {
+      new QRCode(qrContainer, {
+        text: qrUrl,
+        width: 200,
+        height: 200,
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    } catch(e) {
+      console.error('Ошибка генерации QR:', e);
+    }
+  }
+  
+  // ==================== РАБОТА С ДАННЫМИ ====================
+  
+  // Добавление новых учетных данных
+  function addCredential(login, password) {
+    // Проверяем, нет ли уже такой записи (по логину)
+    const exists = credentials.some(cred => cred.login === login);
+    if (!exists) {
+      credentials.push({ login, password });
+      renderCredentials();
+    }
+    return !exists;
+  }
+  
+  // Отображение всех паролей
+  function renderCredentials() {
+    if (!credentialsList) return;
+    
+    if (credentials.length === 0) {
+      credentialsList.innerHTML = `
+        <div style="text-align: center; padding: 40px; color: #666;">
+          🔄 Ожидание данных от приложения...<br>
+          <small>Отсканируйте QR-код мобильным приложением</small>
+        </div>
+      `;
+      return;
+    }
+    
+    // Обновляем счетчик
+    const subtitle = document.getElementById('passwordsSubtitle');
+    subtitle.textContent = `Получено ${credentials.length} запись(ей)`;
+    
+    // Рендерим каждую запись
+    credentialsList.innerHTML = credentials.map((cred, index) => `
+      <div class="credential-card">
+        <div class="field-row">
+          <span class="field-label">👤 Логин:</span>
+          <span class="field-value" data-field="login" data-index="${index}">${escapeHtml(cred.login)}</span>
+          <button class="copy-btn" onclick="copyField('login', ${index})">  Копировать</button>
+        </div>
+        <div class="field-row">
+          <span class="field-label">🔑 Пароль:</span>
+          <span class="field-value" data-field="password" data-index="${index}">${escapeHtml(cred.password)}</span>
+          <button class="copy-btn" onclick="copyField('password', ${index})"> Копировать</button>
+        </div>
+      </div>
+    `).join('');
+  }
+  
+  // Функция копирования (глобальная для onclick)
+  window.copyField = function(fieldType, index) {
+    const credential = credentials[index];
+    if (!credential) return;
+    
+    const value = credential[fieldType];
+    navigator.clipboard.writeText(value).then(() => {
+      // Визуальная обратная связь
+      alert(`✅ ${fieldType === 'login' ? 'Логин' : 'Пароль'} скопирован: ${value}`);
+    }).catch(err => {
+      console.error('Ошибка копирования:', err);
+      alert('❌ Не удалось скопировать');
+    });
+  };
+  
+  // Экранирование HTML
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, function(m) {
+      if (m === '&') return '&amp;';
+      if (m === '<') return '&lt;';
+      if (m === '>') return '&gt;';
+      return m;
+    });
+  }
+  
+  // ==================== РАБОТА С СЕРВЕРОМ ====================
+  
+  /**
+   * 🚀 ФУНКЦИЯ ДЛЯ РЕАЛЬНОГО СЕРВЕРА:
+   * Отправка данных на сервер (когда приложение шлет POST)
+   * Сейчас используется для имитации, в реальном приложении
+   * сервер сам получает данные от мобильного приложения
+   */
+  async function sendToServer(login, password) {
+    const url = `${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.endpoints.receiveData}?session=${sessionId}`;
+    
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), SERVER_CONFIG.timeout);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ login, password }),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      console.log(`✅ Данные отправлены на сервер: ${login}`);
+      return true;
+    } catch (error) {
+      console.warn(`⚠️ Не удалось отправить на сервер: ${error.message}`);
+      return false;
+    }
+  }
+  
+  /**
+   * 🔄 ФУНКЦИЯ ДЛЯ РЕАЛЬНОГО СЕРВЕРА:
+   * Получение всех данных с сервера по сессии
+   */
+  async function fetchFromServer() {
+    const url = `${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.endpoints.getData}?session=${sessionId}`;
+    
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), SERVER_CONFIG.timeout);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          // Сервер еще не имеет данных для этой сессии
+          return [];
+        }
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      // В тестовом режиме игнорируем ошибки сети
+      if (error.name === 'AbortError') {
+        console.log('⏱️ Таймаут запроса к серверу');
+      }
+      return [];
+    }
+  }
+  
+  // Опрос сервера на наличие новых данных
+  async function pollServer() {
+    const serverData = await fetchFromServer();
+    
+    if (serverData && serverData.length > 0) {
+      let hasNew = false;
+      for (const item of serverData) {
+        if (item.login && item.password) {
+          if (addCredential(item.login, item.password)) {
+            hasNew = true;
+          }
+        }
+      }
+      
+      if (hasNew && credentials.length > 0) {
+        showPasswordsPage();
+      }
+    }
+  }
+  
+  // Запуск опроса сервера
+  function startPolling() {
+    stopPolling();
+    pollTimer = setInterval(() => pollServer(), SERVER_CONFIG.pollInterval);
+  }
+  
+  // ==================== ИМИТАЦИЯ ПОЛУЧЕНИЯ ДАННЫХ ОТ ПРИЛОЖЕНИЯ ====================
+  
+  // 🧪 ТЕСТОВАЯ ФУНКЦИЯ: Имитирует получение данных от мобильного приложения
+  // В реальном приложении данные будут приходить через сервер
+  async function simulateAppData() {
+    // Тестовые данные (как будто приложение отправило)
+    const testData = [
+      { login: "user@example.com", password: "MySecretPass123!" },
+      { login: "admin@company.ru", password: "AdminPass456" },
+      { login: "social_media_user", password: "SocialMediaPass" },
+      { login: "banking_login", password: "SecureBank789" }
+    ];
+    
+    // Показываем индикатор загрузки на странице сканирования
+    const originalBtnText = document.getElementById('simulateScanBtn').textContent;
+    document.getElementById('simulateScanBtn').textContent = '⏳ Отправка данных...';
+    document.getElementById('simulateScanBtn').disabled = true;
+    
+    // Имитируем отправку каждого пароля с задержкой
+    for (let i = 0; i < testData.length; i++) {
+      const item = testData[i];
+      
+      // Добавляем локально
+      addCredential(item.login, item.password);
+      
+      // Пытаемся отправить на сервер (если сервер существует)
+      await sendToServer(item.login, item.password);
+      
+      // Небольшая задержка для реализма
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    // Восстанавливаем кнопку
+    document.getElementById('simulateScanBtn').textContent = originalBtnText;
+    document.getElementById('simulateScanBtn').disabled = false;
+    
+    // Переходим на страницу с паролями
+    if (credentials.length > 0) {
+      showPasswordsPage();
+    } else {
+      showError('Не удалось получить данные от приложения');
+    }
+  }
+  
+  // ==================== ИНИЦИАЛИЗАЦИЯ ====================
+  
+  // Обработчики кнопок
+  document.getElementById('simulateScanBtn').addEventListener('click', () => {
+    simulateAppData();
+  });
+  
+  document.getElementById('backToScanBtn').addEventListener('click', () => {
+    // Очищаем данные при возврате
+    credentials = [];
+    sessionId = generateSessionId();
+    generateQRCode();
+    showScanPage();
+    renderCredentials();
+  });
+  
+  document.getElementById('retryBtn').addEventListener('click', () => {
+    showScanPage();
+  });
+  
+  // Старт
+  generateQRCode();
+  startPolling(); // Запускаем опрос сервера на случай реальных данных
+  
+  // Выводим в консоль информацию для разработчиков
+  console.log(`
+  ═══════════════════════════════════════════════════════════
+  📱 PASSWORD MANAGER - РАЗРАБОТЧИКАМ
+  ═══════════════════════════════════════════════════════════
+  
+  🔑 ID сессии: ${sessionId}
+  
+  📲 QR-код содержит URL:
+  ${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.endpoints.receiveData}?session=${sessionId}
+  
+  🤖 ОЖИДАЕМЫЙ ЗАПРОС ОТ МОБИЛЬНОГО ПРИЛОЖЕНИЯ:
+  ─────────────────────────────────────────────────────────
+  POST ${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.endpoints.receiveData}?session=${sessionId}
+  Content-Type: application/json
+  
+  {
+    "login": "user@example.com",
+    "password": "user_password"
+  }
+  ─────────────────────────────────────────────────────────
+  
+  📤 ОТВЕТ СЕРВЕРА ДЛЯ ПОЛУЧЕНИЯ ДАННЫХ:
+  GET ${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.endpoints.getData}?session=${sessionId}
+  
+  🔄 Сервер должен возвращать JSON-массив:
+  [
+    {"login": "user1", "password": "pass1"},
+    {"login": "user2", "password": "pass2"}
+  ]
+  
+  ═══════════════════════════════════════════════════════════
+  ✅ Для теста нажмите кнопку "Имитировать сканирование"
+  ═══════════════════════════════════════════════════════════
+  `);
+</script>
+
+</body>
+</html>
