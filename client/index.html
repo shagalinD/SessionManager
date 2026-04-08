@@ -249,17 +249,28 @@
     
     <div class="qr-section">
       <div id="qrcode"></div>
+      <p class="qr-info" id="phoneStatus" aria-live="polite">
+        Проверка связи с телефоном…
+      </p>
+      <p class="qr-info">
+        URL в QR (должен указывать на IP телефона в Wi‑Fi, порт 8080):<br>
+        <code id="qrUrlDisplay"></code>
+      </p>
+      <p class="subtitle" style="margin-top: 16px; font-size: 13px;">
+        После сканирования в приложении выберите учётную запись и отправьте её.
+        Текущая версия сервера на телефоне не передаёт пароли в браузер — список ниже только для локальной демонстрации.
+      </p>
     </div>
 
-    <button class="btn" id="simulateScanBtn">
-        Сканирование
+    <button class="btn" id="simulateScanBtn" type="button">
+      Демо: заполнить список локально
     </button>
   </div>
 
   <!-- Страница 2: Список паролей -->
   <div id="passwordsPage" class="hidden">
     <h1> Мои пароли</h1>
-    <div class="subtitle" id="passwordsSubtitle">Загружено из приложения</div>
+    <div class="subtitle" id="passwordsSubtitle">Демо или ручной ввод</div>
     
     <div class="credentials-list" id="credentialsList"></div>
     
@@ -286,28 +297,16 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <script>
-  // ==================== КОНФИГУРАЦИЯ ДЛЯ СЕРВЕРА ====================
-  // 🔧 НАСТРОЙКИ ДЛЯ РЕАЛЬНОГО СЕРВЕРА:
-  // 1. Замените IP на реальный адрес вашего сервера
-  // 2. Сервер должен обрабатывать POST /request?session=ID
-  // 3. Сервер должен хранить полученные данные по сессии
-  // 4. Для получения данных используйте GET /get?session=ID
-  
+  // ==================== КОНФИГ (мобильное приложение Session Manager) ====================
+  // 1. Укажите IP телефона в той же Wi‑Fi сети, что и этот компьютер (порт 8080 — слушает LocalHttpServer во Flutter).
+  // 2. QR содержит GET …/request?session=… — приложение читает session и валидирует host/port (см. QrUrlValidator).
+  // 3. Отдача логина/пароля идёт POST /credentials с телефона на сам телефон; в браузер данные этим API не отдаются.
+
   const SERVER_CONFIG = {
-    // 🔄 ИЗМЕНИТЕ ЭТОТ IP НА РЕАЛЬНЫЙ IP ВАШЕГО СЕРВЕРА
     baseUrl: "http://192.168.1.100:8080",
-    
-    // Пути для API
-    endpoints: {
-      receiveData: "/request",     // POST - получение данных от приложения
-      getData: "/get"             // GET - получение всех данных по сессии
-    },
-    
-    // Таймауты
+    healthPath: "/request",
     timeout: 5000,
-    
-    // Интервал опроса сервера (в миллисекундах)
-    pollInterval: 2000
+    pollInterval: 3000
   };
   
   // Глобальные переменные
@@ -344,12 +343,8 @@
     scanPage.classList.remove('hidden');
     passwordsPage.classList.add('hidden');
     errorPage.classList.add('hidden');
-    
-    // Генерируем новый sessionId при возврате
-    if (!pollTimer) {
-      sessionId = generateSessionId();
-      generateQRCode();
-    }
+    generateQRCode();
+    startPolling();
   }
   
   // Показать страницу с паролями
@@ -372,7 +367,7 @@
   
   // Генерация QR-кода с актуальной сессией
   function generateQRCode() {
-    const qrUrl = `${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.endpoints.receiveData}?session=${sessionId}`;
+    const qrUrl = `${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.healthPath}?session=${encodeURIComponent(sessionId)}`;
     
     // Показываем URL в интерфейсе (для отладки)
     const qrUrlDisplay = document.getElementById('qrUrlDisplay');
@@ -471,151 +466,85 @@
     });
   }
   
-  // ==================== РАБОТА С СЕРВЕРОМ ====================
-  
-  /**
-   * 🚀 ФУНКЦИЯ ДЛЯ РЕАЛЬНОГО СЕРВЕРА:
-   * Отправка данных на сервер (когда приложение шлет POST)
-   * Сейчас используется для имитации, в реальном приложении
-   * сервер сам получает данные от мобильного приложения
-   */
-  async function sendToServer(login, password) {
-    const url = `${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.endpoints.receiveData}?session=${sessionId}`;
-    
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), SERVER_CONFIG.timeout);
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ login, password }),
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      console.log(`✅ Данные отправлены на сервер: ${login}`);
-      return true;
-    } catch (error) {
-      console.warn(`⚠️ Не удалось отправить на сервер: ${error.message}`);
-      return false;
-    }
+  // ==================== СВЯЗЬ С ТЕЛЕФОНОМ (LocalHttpServer во Flutter) ====================
+  // GET /request → { "status": "ok" } — единственный метод, доступный браузеру для проверки доступности.
+
+  function setPhoneStatus(text, ok) {
+    const el = document.getElementById('phoneStatus');
+    if (!el) return;
+    el.textContent = text;
+    el.style.background = ok ? '#d4edda' : '#f8f9fa';
+    el.style.color = ok ? '#155724' : '#666';
   }
-  
-  /**
-   * 🔄 ФУНКЦИЯ ДЛЯ РЕАЛЬНОГО СЕРВЕРА:
-   * Получение всех данных с сервера по сессии
-   */
-  async function fetchFromServer() {
-    const url = `${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.endpoints.getData}?session=${sessionId}`;
-    
+
+  async function pingPhone() {
+    const url = `${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.healthPath}`;
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), SERVER_CONFIG.timeout);
-      
       const response = await fetch(url, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        signal: controller.signal
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
       });
-      
       clearTimeout(timeoutId);
-      
       if (!response.ok) {
-        if (response.status === 404) {
-          // Сервер еще не имеет данных для этой сессии
-          return [];
-        }
-        throw new Error(`HTTP ${response.status}`);
+        setPhoneStatus(`Телефон отвечает с ошибкой HTTP ${response.status}.`, false);
+        return;
       }
-      
       const data = await response.json();
-      return Array.isArray(data) ? data : [];
-    } catch (error) {
-      // В тестовом режиме игнорируем ошибки сети
-      if (error.name === 'AbortError') {
-        console.log('⏱️ Таймаут запроса к серверу');
+      if (data && data.status === 'ok') {
+        setPhoneStatus('Телефон на связи (GET /request OK). Можно сканировать QR.', true);
+      } else {
+        setPhoneStatus('Неожиданный ответ /request — проверьте приложение.', false);
       }
-      return [];
+    } catch (e) {
+      const msg = e.name === 'AbortError' ? 'Таймаут' : (e.message || String(e));
+      setPhoneStatus(
+        `Нет связи с ${SERVER_CONFIG.baseUrl} (${msg}). Проверьте IP в SERVER_CONFIG и Wi‑Fi.`,
+        false
+      );
     }
   }
-  
-  // Опрос сервера на наличие новых данных
-  async function pollServer() {
-    const serverData = await fetchFromServer();
-    
-    if (serverData && serverData.length > 0) {
-      let hasNew = false;
-      for (const item of serverData) {
-        if (item.login && item.password) {
-          if (addCredential(item.login, item.password)) {
-            hasNew = true;
-          }
-        }
-      }
-      
-      if (hasNew && credentials.length > 0) {
-        showPasswordsPage();
-      }
-    }
+
+  async function pollPhone() {
+    await pingPhone();
   }
-  
-  // Запуск опроса сервера
+
   function startPolling() {
     stopPolling();
-    pollTimer = setInterval(() => pollServer(), SERVER_CONFIG.pollInterval);
+    pollPhone();
+    pollTimer = setInterval(() => pollPhone(), SERVER_CONFIG.pollInterval);
   }
   
-  // ==================== ИМИТАЦИЯ ПОЛУЧЕНИЯ ДАННЫХ ОТ ПРИЛОЖЕНИЯ ====================
-  
-  // 🧪 ТЕСТОВАЯ ФУНКЦИЯ: Имитирует получение данных от мобильного приложения
-  // В реальном приложении данные будут приходить через сервер
+  // ==================== ЛОКАЛЬНОЕ ДЕМО (UI без сервера) ====================
   async function simulateAppData() {
-    // Тестовые данные (как будто приложение отправило)
     const testData = [
       { login: "user@example.com", password: "MySecretPass123!" },
       { login: "admin@company.ru", password: "AdminPass456" },
       { login: "social_media_user", password: "SocialMediaPass" },
       { login: "banking_login", password: "SecureBank789" }
     ];
-    
-    // Показываем индикатор загрузки на странице сканирования
-    const originalBtnText = document.getElementById('simulateScanBtn').textContent;
-    document.getElementById('simulateScanBtn').textContent = '⏳ Отправка данных...';
-    document.getElementById('simulateScanBtn').disabled = true;
-    
-    // Имитируем отправку каждого пароля с задержкой
-    for (let i = 0; i < testData.length; i++) {
-      const item = testData[i];
-      
-      // Добавляем локально
+
+    const btn = document.getElementById('simulateScanBtn');
+    const originalBtnText = btn.textContent;
+    btn.textContent = '⏳ Загрузка…';
+    btn.disabled = true;
+
+    for (const item of testData) {
       addCredential(item.login, item.password);
-      
-      // Пытаемся отправить на сервер (если сервер существует)
-      await sendToServer(item.login, item.password);
-      
-      // Небольшая задержка для реализма
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((r) => setTimeout(r, 200));
     }
-    
-    // Восстанавливаем кнопку
-    document.getElementById('simulateScanBtn').textContent = originalBtnText;
-    document.getElementById('simulateScanBtn').disabled = false;
-    
-    // Переходим на страницу с паролями
+
+    btn.textContent = originalBtnText;
+    btn.disabled = false;
+
     if (credentials.length > 0) {
+      const subtitle = document.getElementById('passwordsSubtitle');
+      if (subtitle) subtitle.textContent = 'Локальная демонстрация (не с телефона)';
       showPasswordsPage();
     } else {
-      showError('Не удалось получить данные от приложения');
+      showError('Не удалось подготовить демо-данные');
     }
   }
   
@@ -627,56 +556,30 @@
   });
   
   document.getElementById('backToScanBtn').addEventListener('click', () => {
-    // Очищаем данные при возврате
     credentials = [];
     sessionId = generateSessionId();
+    const subtitle = document.getElementById('passwordsSubtitle');
+    if (subtitle) subtitle.textContent = 'Демо или ручной ввод';
     generateQRCode();
     showScanPage();
     renderCredentials();
   });
   
   document.getElementById('retryBtn').addEventListener('click', () => {
+    sessionId = generateSessionId();
     showScanPage();
   });
   
   // Старт
   generateQRCode();
-  startPolling(); // Запускаем опрос сервера на случай реальных данных
-  
-  // Выводим в консоль информацию для разработчиков
+  startPolling();
+
   console.log(`
-  ═══════════════════════════════════════════════════════════
-  📱 PASSWORD MANAGER - РАЗРАБОТЧИКАМ
-  ═══════════════════════════════════════════════════════════
-  
-  🔑 ID сессии: ${sessionId}
-  
-  📲 QR-код содержит URL:
-  ${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.endpoints.receiveData}?session=${sessionId}
-  
-  🤖 ОЖИДАЕМЫЙ ЗАПРОС ОТ МОБИЛЬНОГО ПРИЛОЖЕНИЯ:
-  ─────────────────────────────────────────────────────────
-  POST ${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.endpoints.receiveData}?session=${sessionId}
-  Content-Type: application/json
-  
-  {
-    "login": "user@example.com",
-    "password": "user_password"
-  }
-  ─────────────────────────────────────────────────────────
-  
-  📤 ОТВЕТ СЕРВЕРА ДЛЯ ПОЛУЧЕНИЯ ДАННЫХ:
-  GET ${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.endpoints.getData}?session=${sessionId}
-  
-  🔄 Сервер должен возвращать JSON-массив:
-  [
-    {"login": "user1", "password": "pass1"},
-    {"login": "user2", "password": "pass2"}
-  ]
-  
-  ═══════════════════════════════════════════════════════════
-  ✅ Для теста нажмите кнопку "Имитировать сканирование"
-  ═══════════════════════════════════════════════════════════
+Session Manager (client)
+- sessionId: ${sessionId}
+- QR URL: ${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.healthPath}?session=${sessionId}
+- Flutter: GET ${SERVER_CONFIG.healthPath} → {"status":"ok"}; POST /credentials только с телефона (account_id).
+- Кнопка «Демо» заполняет список локально для проверки вёрстки.
   `);
 </script>
 
