@@ -38,16 +38,30 @@ class CredentialsNotifier extends ChangeNotifier {
 
 class SessionFlowNotifier extends ChangeNotifier {
   String? _pendingSessionId;
+  /// База URL из QR (схема + хост + порт), без path — для POST на релей (Node server.js).
+  Uri? _relayOrigin;
 
   String? get pendingSessionId => _pendingSessionId;
 
-  void setSessionFromQr(String sessionId) {
+  Uri? get relayOrigin => _relayOrigin;
+
+  void setSessionFromQr({required String sessionId, required Uri requestUri}) {
     _pendingSessionId = sessionId;
+    if (requestUri.hasScheme && requestUri.host.isNotEmpty) {
+      _relayOrigin = Uri(
+        scheme: requestUri.scheme,
+        host: requestUri.host,
+        port: requestUri.hasPort ? requestUri.port : null,
+      );
+    } else {
+      _relayOrigin = null;
+    }
     notifyListeners();
   }
 
   void clearSession() {
     _pendingSessionId = null;
+    _relayOrigin = null;
     notifyListeners();
   }
 }

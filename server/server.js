@@ -1,5 +1,7 @@
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
+const QRCode = require('qrcode');
 
 const app = express();
 const PORT = 8080;
@@ -13,6 +15,30 @@ app.use(express.json()); // Парсим JSON
 const sessions = new Map();
 
 // ==================== API ENDPOINTS ====================
+
+/**
+ * GET /api/qr.png?data=<url-encoded payload>
+ * PNG QR (npm package `qrcode`). Статику подключаем ниже — этот маршрут должен быть раньше.
+ */
+app.get('/api/qr.png', async (req, res) => {
+    const data = req.query.data;
+    if (!data || typeof data !== 'string') {
+        return res.status(400).type('text/plain').send('Query "data" is required');
+    }
+    try {
+        const buf = await QRCode.toBuffer(data, {
+            type: 'png',
+            width: 240,
+            margin: 2,
+            errorCorrectionLevel: 'M',
+        });
+        res.setHeader('Cache-Control', 'no-store');
+        res.type('image/png').send(buf);
+    } catch (err) {
+        console.error('QR generation failed:', err);
+        res.status(500).type('text/plain').send(String(err.message || err));
+    }
+});
 
 /**
  * GET /request?session=...
@@ -133,17 +159,24 @@ app.delete('/clear', (req, res) => {
     res.json({ success: true, message: 'Session cleared' });
 });
 
-// Запускаем сервер
-app.listen(PORT, () => {
+// Статика клиента — после API, чтобы /api/* не перехватывалось файлами.
+// Открывайте: http://<IP_Mac_в_Wi‑Fi>:8080/
+app.use(express.static(path.join(__dirname, '..', 'client')));
+
+// 0.0.0.0 — принимать подключения с телефона в той же Wi‑Fi (не только localhost).
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`
 ╔══════════════════════════════════════════════════════════════╗
 ║     🚀 Password Manager Server успешно запущен!              ║
 ╠══════════════════════════════════════════════════════════════╣
 ║                                                              ║
-║   📡 Сервер слушает: http://localhost:${PORT}                 ║
-║   🌐 Для доступа из сети: http://192.168.1.100:${PORT}        ║
+║   📡 Локально: http://localhost:${PORT}                       ║
+║   🌐 С телефона откройте в браузере на Mac:                   ║
+║      http://<IP_вашего_Mac_в_Wi‑Fi>:${PORT}/                  ║
+║      (страница из папки client; QR подставит этот IP сам.)    ║
 ║                                                              ║
 ║   📍 Доступные эндпоинты:                                    ║
+║   • GET    /api/qr.png?data=…   - PNG QR (npm qrcode)         ║
 ║   • POST   /request?session=ID  - получить данные от телефона║
 ║   • GET    /get?session=ID      - получить данные для сайта  ║
 ║   • GET    /sessions            - список всех сессий (отладка)║

@@ -66,10 +66,15 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera is used to scan QR codes for session pairing on your local network.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>This app exposes a local HTTP server so a browser extension on the same Wi‑Fi can receive credentials.</string>
+	<string>Приложение подключается по вашей Wi‑Fi сети к вашему Mac (передача сессии). Нужен доступ к локальной сети.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_http._tcp.</string>

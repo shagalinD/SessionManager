@@ -53,12 +53,19 @@
       margin: 20px 0;
     }
 
-    #qrcode {
+    .qr-wrap {
       display: inline-block;
       padding: 20px;
       background: white;
       border-radius: 16px;
       box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+
+    .qr-wrap img {
+      display: block;
+      width: 200px;
+      height: 200px;
+      image-rendering: pixelated;
     }
 
     .qr-info {
@@ -248,7 +255,9 @@
     <div class="subtitle">Откройте мобильное приложение и отсканируйте код</div>
     
     <div class="qr-section">
-      <div id="qrcode"></div>
+      <div class="qr-wrap">
+        <img id="qrcodeImg" alt="QR-код сессии" width="200" height="200" />
+      </div>
       <p class="qr-info" id="phoneStatus" aria-live="polite">
         Проверка связи с сервером…
       </p>
@@ -294,15 +303,32 @@
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-
 <script>
   // ==================== КОНФИГ (Node server.js — релей) ====================
-  // baseUrl: тот же хост:порт, что и node server.js. Порт 8080 — требование мобильного QrUrlValidator.
-  // Сервер: GET /request → { status: ok }; POST /request — от телефона; GET /get — данные для этой страницы.
+  // Откройте эту страницу с Mac так: node server.js в папке server/, затем в браузере
+  // http://<IP_Mac_в_Wi‑Fi>:8080/ — тогда baseUrl возьмётся из адреса строки (QR для телефона будет верным).
+  // Если открыли файл как file:// или через 127.0.0.1 — подставьте IP вручную ниже (FALLBACK_RELAY_BASE).
+
+  const FALLBACK_RELAY_BASE = 'http://10.10.0.232:8080';
+
+  function resolveRelayBaseUrl() {
+    try {
+      const { protocol, hostname, port } = window.location;
+      if (protocol !== 'http:' && protocol !== 'https:') {
+        return FALLBACK_RELAY_BASE;
+      }
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return FALLBACK_RELAY_BASE;
+      }
+      const p = port ? ':' + port : '';
+      return protocol + '//' + hostname + p;
+    } catch (e) {
+      return FALLBACK_RELAY_BASE;
+    }
+  }
 
   const SERVER_CONFIG = {
-    baseUrl: "http://127.0.0.1:8080",
+    baseUrl: resolveRelayBaseUrl(),
     healthPath: "/request",
     getPath: "/get",
     timeout: 5000,
@@ -365,31 +391,23 @@
   
   // ==================== РАБОТА С QR-КОДОМ ====================
   
-  // Генерация QR-кода с актуальной сессией
+  // PNG QR с сервера Node (npm package `qrcode`)
   function generateQRCode() {
     const qrUrl = `${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.healthPath}?session=${encodeURIComponent(sessionId)}`;
-    
-    // Показываем URL в интерфейсе (для отладки)
+
     const qrUrlDisplay = document.getElementById('qrUrlDisplay');
     if (qrUrlDisplay) {
       qrUrlDisplay.textContent = qrUrl;
     }
-    
-    // Очищаем старый QR
-    const qrContainer = document.getElementById('qrcode');
-    qrContainer.innerHTML = '';
-    
-    // Создаем новый QR
-    try {
-      new QRCode(qrContainer, {
-        text: qrUrl,
-        width: 200,
-        height: 200,
-        correctLevel: QRCode.CorrectLevel.M
-      });
-    } catch(e) {
-      console.error('Ошибка генерации QR:', e);
-    }
+
+    const img = document.getElementById('qrcodeImg');
+    if (!img) return;
+
+    const src = '/api/qr.png?data=' + encodeURIComponent(qrUrl);
+    img.src = src;
+    img.onerror = function () {
+      console.error('Не удалось загрузить QR. Откройте страницу через node server.js (http://…:8080/), не file://');
+    };
   }
   
   // ==================== РАБОТА С ДАННЫМИ ====================

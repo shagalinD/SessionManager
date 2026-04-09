@@ -62,8 +62,11 @@ class _QrScanScreenState extends State<QrScanScreen> {
         _handled = true;
         await _controller.stop();
         if (!mounted) return;
-        context.read<SessionFlowNotifier>().setSessionFromQr(result.session!);
-        Navigator.of(context).pop();
+        context.read<SessionFlowNotifier>().setSessionFromQr(
+              sessionId: result.session!,
+              requestUri: uri,
+            );
+        Navigator.of(context).pop(true);
         return;
       }
       if (result.rejectionMessage != null) {
@@ -92,8 +95,9 @@ class _QrScanScreenState extends State<QrScanScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Text(
-                  'Ожидается: http://<IP_телефона>:8080/request?session=…\n'
-                  'На эмуляторе можно http://127.0.0.1:8080/request?session=…',
+                  'После скана сами данные не отправляются — откройте список, '
+                  'выберите запись и «Отправить на сервер».\n'
+                  'QR с Mac: http://<IP_Mac>:8080/request?session=…',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),

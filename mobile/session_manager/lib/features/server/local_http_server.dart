@@ -21,12 +21,31 @@ class LocalHttpServer {
 
   int get port => _server?.port ?? 8080;
 
+  bool get isRunning => _server != null;
+
+  /// URL для запросов с этого же устройства (симулятор/телефон) к встроенному серверу.
+  Uri credentialsUri() =>
+      Uri(scheme: 'http', host: '127.0.0.1', port: port, path: '/credentials');
+
   Future<void> start() async {
     if (_server != null) return;
     final handler = Pipeline()
         .addMiddleware(_corsMiddleware())
         .addHandler(_handle);
-    _server = await shelf_io.serve(handler, InternetAddress.anyIPv4, 8080);
+    try {
+      _server = await shelf_io.serve(handler, InternetAddress.anyIPv4, 8080);
+    } on SocketException catch (e) {
+      if (e.message.contains('Address already in use') ||
+          e.osError?.errorCode == 48) {
+        throw SocketException(
+          'Порт 8080 занят (часто это node server.js на том же Mac в симуляторе). '
+          'Остановите другой процесс на 8080 или смените его порт.',
+          address: e.address,
+          port: e.port,
+        );
+      }
+      rethrow;
+    }
   }
 
   Future<void> stop() async {
