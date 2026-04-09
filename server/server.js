@@ -15,6 +15,14 @@ const sessions = new Map();
 // ==================== API ENDPOINTS ====================
 
 /**
+ * GET /request?session=...
+ * Проверка доступности (как LocalHttpServer во Flutter) и для QR; не путать с POST /request.
+ */
+app.get('/request', (req, res) => {
+    res.json({ status: 'ok' });
+});
+
+/**
  * POST /request?session={sessionId}
  * Принимает данные от мобильного приложения
  * 

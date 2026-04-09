@@ -250,15 +250,15 @@
     <div class="qr-section">
       <div id="qrcode"></div>
       <p class="qr-info" id="phoneStatus" aria-live="polite">
-        Проверка связи с телефоном…
+        Проверка связи с сервером…
       </p>
       <p class="qr-info">
-        URL в QR (должен указывать на IP телефона в Wi‑Fi, порт 8080):<br>
+        URL в QR (тот же хост, что и Node <code>server.js</code>, порт из SERVER_CONFIG):<br>
         <code id="qrUrlDisplay"></code>
       </p>
       <p class="subtitle" style="margin-top: 16px; font-size: 13px;">
-        После сканирования в приложении выберите учётную запись и отправьте её.
-        Текущая версия сервера на телефоне не передаёт пароли в браузер — список ниже только для локальной демонстрации.
+        Телефон должен отправить учётные данные на этот сервер (POST /request с тем же session).
+        Страница опрашивает GET /get и покажет пароли, когда сервер их получит.
       </p>
     </div>
 
@@ -297,16 +297,16 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <script>
-  // ==================== КОНФИГ (мобильное приложение Session Manager) ====================
-  // 1. Укажите IP телефона в той же Wi‑Fi сети, что и этот компьютер (порт 8080 — слушает LocalHttpServer во Flutter).
-  // 2. QR содержит GET …/request?session=… — приложение читает session и валидирует host/port (см. QrUrlValidator).
-  // 3. Отдача логина/пароля идёт POST /credentials с телефона на сам телефон; в браузер данные этим API не отдаются.
+  // ==================== КОНФИГ (Node server.js — релей) ====================
+  // baseUrl: тот же хост:порт, что и node server.js. Порт 8080 — требование мобильного QrUrlValidator.
+  // Сервер: GET /request → { status: ok }; POST /request — от телефона; GET /get — данные для этой страницы.
 
   const SERVER_CONFIG = {
-    baseUrl: "http://192.168.1.100:8080",
+    baseUrl: "http://127.0.0.1:8080",
     healthPath: "/request",
+    getPath: "/get",
     timeout: 5000,
-    pollInterval: 3000
+    pollInterval: 2000
   };
   
   // Глобальные переменные
@@ -466,8 +466,7 @@
     });
   }
   
-  // ==================== СВЯЗЬ С ТЕЛЕФОНОМ (LocalHttpServer во Flutter) ====================
-  // GET /request → { "status": "ok" } — единственный метод, доступный браузеру для проверки доступности.
+  // ==================== СВЯЗЬ С NODE-СЕРВЕРОМ (server.js) ====================
 
   function setPhoneStatus(text, ok) {
     const el = document.getElementById('phoneStatus');
@@ -477,7 +476,7 @@
     el.style.color = ok ? '#155724' : '#666';
   }
 
-  async function pingPhone() {
+  async function pingServer() {
     const url = `${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.healthPath}`;
     try {
       const controller = new AbortController();
@@ -489,32 +488,66 @@
       });
       clearTimeout(timeoutId);
       if (!response.ok) {
-        setPhoneStatus(`Телефон отвечает с ошибкой HTTP ${response.status}.`, false);
-        return;
+        setPhoneStatus(`Сервер отвечает HTTP ${response.status}. Запущен ли node server.js?`, false);
+        return false;
       }
       const data = await response.json();
       if (data && data.status === 'ok') {
-        setPhoneStatus('Телефон на связи (GET /request OK). Можно сканировать QR.', true);
-      } else {
-        setPhoneStatus('Неожиданный ответ /request — проверьте приложение.', false);
+        setPhoneStatus('Сервер на связи (GET /request OK). Ожидаем данные по сессии…', true);
+        return true;
       }
+      setPhoneStatus('Неожиданный ответ GET /request.', false);
+      return false;
     } catch (e) {
       const msg = e.name === 'AbortError' ? 'Таймаут' : (e.message || String(e));
       setPhoneStatus(
-        `Нет связи с ${SERVER_CONFIG.baseUrl} (${msg}). Проверьте IP в SERVER_CONFIG и Wi‑Fi.`,
+        `Нет связи с ${SERVER_CONFIG.baseUrl} (${msg}). Запустите: node server.js в папке server/`,
         false
       );
+      return false;
     }
   }
 
-  async function pollPhone() {
-    await pingPhone();
+  /** Данные, которые положил POST /request (телефон) или тест — отдаёт GET /get */
+  async function fetchCredentialsFromServer() {
+    const url = `${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.getPath}?session=${encodeURIComponent(sessionId)}`;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), SERVER_CONFIG.timeout);
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (!response.ok) return;
+      const data = await response.json();
+      if (!Array.isArray(data) || data.length === 0) return;
+      let hasNew = false;
+      for (const item of data) {
+        const login = item.login;
+        const password = item.password;
+        if (login && password && addCredential(login, password)) hasNew = true;
+      }
+      if (hasNew && credentials.length > 0) {
+        const subtitle = document.getElementById('passwordsSubtitle');
+        if (subtitle) subtitle.textContent = 'Получено с сервера (GET /get)';
+        showPasswordsPage();
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') console.warn('GET /get:', e.message);
+    }
+  }
+
+  async function pollServer() {
+    await pingServer();
+    await fetchCredentialsFromServer();
   }
 
   function startPolling() {
     stopPolling();
-    pollPhone();
-    pollTimer = setInterval(() => pollPhone(), SERVER_CONFIG.pollInterval);
+    pollServer();
+    pollTimer = setInterval(() => pollServer(), SERVER_CONFIG.pollInterval);
   }
   
   // ==================== ЛОКАЛЬНОЕ ДЕМО (UI без сервера) ====================
@@ -574,13 +607,10 @@
   generateQRCode();
   startPolling();
 
-  console.log(`
-Session Manager (client)
-- sessionId: ${sessionId}
-- QR URL: ${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.healthPath}?session=${sessionId}
-- Flutter: GET ${SERVER_CONFIG.healthPath} → {"status":"ok"}; POST /credentials только с телефона (account_id).
-- Кнопка «Демо» заполняет список локально для проверки вёрстки.
-  `);
+  console.log(`Session Manager (client + Node)
+sessionId: ${sessionId}
+QR: ${SERVER_CONFIG.baseUrl}${SERVER_CONFIG.healthPath}?session=${sessionId}
+Опрос: GET ${SERVER_CONFIG.getPath}?session=… — данные после POST /request с телефона на этот же baseUrl.`);
 </script>
 
 </body>

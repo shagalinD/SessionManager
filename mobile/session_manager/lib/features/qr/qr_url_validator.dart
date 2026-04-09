@@ -31,10 +31,10 @@ class QrUrlValidator {
 
     final host = uri.host.toLowerCase();
     if (!_targetsThisDevice(host, deviceWifiIpv4)) {
-      final hint = deviceWifiIpv4 != null && deviceWifiIpv4.isNotEmpty
-          ? 'В QR должен быть IP этого телефона в Wi‑Fi: $deviceWifiIpv4'
-          : 'Используйте локальный IP (192.168.x.x / 10.x) или 127.0.0.1 для эмулятора.';
-      return QrParseResult(rejectionMessage: hint);
+      return const QrParseResult(
+        rejectionMessage:
+            'В QR нужен локальный IPv4 (192.168.x.x, 10.x или 127.0.0.1).',
+      );
     }
 
     final port = uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 80);
@@ -59,10 +59,11 @@ class QrUrlValidator {
       return true;
     }
     if (deviceWifiIpv4 != null && deviceWifiIpv4.isNotEmpty) {
-      return host == deviceWifiIpv4;
+      if (host == deviceWifiIpv4) {
+        return true;
+      }
     }
-    // IP телефона недоступен (симулятор, права, момент до подключения Wi‑Fi):
-    // принимаем только «домашние» IPv4, чтобы MVP работал без строгого совпадения.
+    // Релей на другой машине в LAN (например Node server.js на ПК): хост — не IP телефона, но тот же сегмент.
     return _isPrivateLanIpv4(host);
   }
 
