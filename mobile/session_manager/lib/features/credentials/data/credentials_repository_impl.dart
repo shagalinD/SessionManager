@@ -27,6 +27,18 @@ class CredentialsRepositoryImpl implements CredentialsRepository {
     return list.cast<Map<String, dynamic>>();
   }
 
+  static String _readUrl(Map<String, dynamic> e) {
+    final u = e['url'];
+    if (u is String && u.trim().isNotEmpty) return u.trim();
+    return '';
+  }
+
+  static String _readLogin(Map<String, dynamic> e) {
+    final l = e['login'];
+    if (l is String) return l;
+    return '';
+  }
+
   Future<void> _writeRaw(List<Map<String, dynamic>> rows) async {
     await _storage.write(key: _blobKey, value: jsonEncode(rows));
   }
@@ -38,8 +50,8 @@ class CredentialsRepositoryImpl implements CredentialsRepository {
         .map(
           (e) => Credential(
             id: e['id'] as String,
-            url: e['url'] as String,
-            login: e['login'] as String,
+            url: _readUrl(e),
+            login: _readLogin(e),
           ),
         )
         .toList();
@@ -54,8 +66,8 @@ class CredentialsRepositoryImpl implements CredentialsRepository {
         final plain = _encryption.decrypt(encPwd);
         return Credential(
           id: id,
-          url: e['url'] as String,
-          login: e['login'] as String,
+          url: _readUrl(e),
+          login: _readLogin(e),
           password: plain,
         );
       }

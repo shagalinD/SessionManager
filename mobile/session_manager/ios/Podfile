@@ -30,6 +30,8 @@ flutter_ios_podfile_setup
 target 'Runner' do
   # Avoid :linkage => :static — it often leads to "Framework 'Pods_Runner' not found".
   use_frameworks!
+  # Нужен для @import в GeneratedPluginRegistrant (flutter_secure_storage, mobile_scanner, …).
+  use_modular_headers!
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do

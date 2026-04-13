@@ -134,6 +134,50 @@
       transform: translateX(3px);
     }
 
+    /* URL — всегда читаемый, без blur (остальные поля можно скрывать до наведения) */
+    .credential-url-block {
+      margin-bottom: 12px;
+      padding: 12px 14px;
+      background: linear-gradient(135deg, #e8f4fc 0%, #f0f7ff 100%);
+      border: 1px solid #b8d4ee;
+      border-radius: 10px;
+      text-align: left;
+    }
+
+    .credential-url-block .url-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #495057;
+      margin-bottom: 6px;
+    }
+
+    .credential-url-block .url-text {
+      font-size: 15px;
+      font-weight: 600;
+      color: #0d47a1;
+      word-break: break-all;
+      line-height: 1.45;
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    }
+
+    .credential-url-block .url-text a {
+      color: #0d47a1;
+      text-decoration: underline;
+    }
+
+    .credential-url-block .url-empty {
+      color: #6c757d;
+      font-weight: 500;
+      font-size: 14px;
+    }
+
+    .credential-url-block .copy-btn {
+      margin-top: 10px;
+    }
+
     /* Строка логина/пароля */
     .field-row {
       display: flex;
@@ -338,7 +382,7 @@
   // Глобальные переменные
   let sessionId = generateSessionId(); // Уникальный ID сессии
   let pollTimer = null;                // Таймер опроса сервера
-  let credentials = [];                // Массив с паролями {login, password}
+  let credentials = [];                // { url, login, password }
   
   // DOM элементы
   const scanPage = document.getElementById('scanPage');
@@ -412,12 +456,14 @@
   
   // ==================== РАБОТА С ДАННЫМИ ====================
   
-  // Добавление новых учетных данных
-  function addCredential(login, password) {
-    // Проверяем, нет ли уже такой записи (по логину)
-    const exists = credentials.some(cred => cred.login === login);
+  // Добавление новых учетных данных (url — сайт из приложения)
+  function addCredential(login, password, url) {
+    const siteUrl = url != null && String(url).trim() !== '' ? String(url).trim() : '';
+    const exists = credentials.some(
+      cred => cred.login === login && (cred.url || '') === siteUrl
+    );
     if (!exists) {
-      credentials.push({ login, password });
+      credentials.push({ url: siteUrl, login, password });
       renderCredentials();
     }
     return !exists;
@@ -442,20 +488,35 @@
     subtitle.textContent = `Получено ${credentials.length} запись(ей)`;
     
     // Рендерим каждую запись
-    credentialsList.innerHTML = credentials.map((cred, index) => `
+    credentialsList.innerHTML = credentials.map((cred, index) => {
+      const rawUrl = cred.url && String(cred.url).trim() ? String(cred.url).trim() : '';
+      const safeUrl = escapeHtml(rawUrl);
+      const canOpenAsLink = rawUrl && /^https?:\/\//i.test(rawUrl);
+      const urlDisplay = rawUrl
+        ? (canOpenAsLink
+            ? `<a href="${encodeURI(rawUrl)}" target="_blank" rel="noopener noreferrer">${safeUrl}</a>`
+            : `<span>${safeUrl}</span>`)
+        : `<span class="url-empty">не указан</span>`;
+      return `
       <div class="credential-card">
+        <div class="credential-url-block">
+          <span class="url-label">Сайт (URL)</span>
+          <div class="url-text">${urlDisplay}</div>
+          <button type="button" class="copy-btn" onclick="copyField('url', ${index})" ${!rawUrl ? 'disabled' : ''}>Копировать URL</button>
+        </div>
         <div class="field-row">
           <span class="field-label">👤 Логин:</span>
           <span class="field-value" data-field="login" data-index="${index}">${escapeHtml(cred.login)}</span>
-          <button class="copy-btn" onclick="copyField('login', ${index})">  Копировать</button>
+          <button class="copy-btn" onclick="copyField('login', ${index})">Копировать</button>
         </div>
         <div class="field-row">
           <span class="field-label">🔑 Пароль:</span>
           <span class="field-value" data-field="password" data-index="${index}">${escapeHtml(cred.password)}</span>
-          <button class="copy-btn" onclick="copyField('password', ${index})"> Копировать</button>
+          <button class="copy-btn" onclick="copyField('password', ${index})">Копировать</button>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   }
   
   // Функция копирования (глобальная для onclick)
@@ -464,9 +525,13 @@
     if (!credential) return;
     
     const value = credential[fieldType];
+    if (value == null || value === '') {
+      alert('Нечего копировать');
+      return;
+    }
+    const label = fieldType === 'login' ? 'Логин' : fieldType === 'password' ? 'Пароль' : 'URL сайта';
     navigator.clipboard.writeText(value).then(() => {
-      // Визуальная обратная связь
-      alert(`✅ ${fieldType === 'login' ? 'Логин' : 'Пароль'} скопирован: ${value}`);
+      alert(`✅ ${label} скопирован: ${value}`);
     }).catch(err => {
       console.error('Ошибка копирования:', err);
       alert('❌ Не удалось скопировать');
@@ -545,7 +610,8 @@
       for (const item of data) {
         const login = item.login;
         const password = item.password;
-        if (login && password && addCredential(login, password)) hasNew = true;
+        const siteUrl = item.url;
+        if (login && password && addCredential(login, password, siteUrl)) hasNew = true;
       }
       if (hasNew && credentials.length > 0) {
         const subtitle = document.getElementById('passwordsSubtitle');
@@ -571,10 +637,10 @@
   // ==================== ЛОКАЛЬНОЕ ДЕМО (UI без сервера) ====================
   async function simulateAppData() {
     const testData = [
-      { login: "user@example.com", password: "MySecretPass123!" },
-      { login: "admin@company.ru", password: "AdminPass456" },
-      { login: "social_media_user", password: "SocialMediaPass" },
-      { login: "banking_login", password: "SecureBank789" }
+      { url: "https://example.com", login: "user@example.com", password: "MySecretPass123!" },
+      { url: "https://company.ru", login: "admin@company.ru", password: "AdminPass456" },
+      { url: "https://social.test", login: "social_media_user", password: "SocialMediaPass" },
+      { url: "https://bank.example", login: "banking_login", password: "SecureBank789" }
     ];
 
     const btn = document.getElementById('simulateScanBtn');
@@ -583,7 +649,7 @@
     btn.disabled = true;
 
     for (const item of testData) {
-      addCredential(item.login, item.password);
+      addCredential(item.login, item.password, item.url);
       await new Promise((r) => setTimeout(r, 200));
     }
 

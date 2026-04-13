@@ -117,10 +117,28 @@ class CredentialsListScreen extends StatelessWidget {
         queryParameters: {'session': sessionId},
       );
       try {
+        final siteUrl = cred.url.trim();
+        if (siteUrl.isEmpty) {
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'У этой записи нет URL в приложении. Откройте «+», добавьте запись заново с полем URL '
+                'или отредактируйте сохранённые данные.',
+              ),
+              duration: Duration(seconds: 10),
+            ),
+          );
+          return;
+        }
         final response = await _postToLan(
           uri,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'login': cred.login, 'password': cred.password}),
+          headers: {'Content-Type': 'application/json; charset=utf-8'},
+          body: jsonEncode({
+            'url': siteUrl,
+            'login': cred.login.trim(),
+            'password': cred.password,
+          }),
         );
         if (!context.mounted) return;
         if (response.statusCode == 200) {

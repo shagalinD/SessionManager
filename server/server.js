@@ -11,7 +11,7 @@ app.use(cors()); // Разрешаем запросы с других домен
 app.use(express.json()); // Парсим JSON
 
 // Хранилище данных (в реальном проекте используйте БД)
-// Структура: { sessionId: [{ login, password }] }
+// Структура: { sessionId: [{ url, login, password, timestamp }] }
 const sessions = new Map();
 
 // ==================== API ENDPOINTS ====================
@@ -52,14 +52,25 @@ app.get('/request', (req, res) => {
  * POST /request?session={sessionId}
  * Принимает данные от мобильного приложения
  * 
- * Тело запроса: { "login": "user@example.com", "password": "secret123" }
+ * Тело: { "url": "...", "login": "...", "password": "..." } — url с телефона (сайт учётки).
  */
 app.post('/request', (req, res) => {
     const sessionId = req.query.session;
-    const { login, password } = req.body;
-    
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const login = body.login;
+    const password = body.password;
+    const rawUrl = body.url;
+    const siteUrl =
+        typeof rawUrl === 'string'
+            ? rawUrl.trim()
+            : rawUrl != null
+              ? String(rawUrl).trim()
+              : '';
+
     console.log(`\n📱 [POST /request] Сессия: ${sessionId}`);
-    console.log(`   Получены данные: ${login} / ${password}`);
+    console.log(`   URL: ${siteUrl || '(пусто — проверьте тело JSON: поле url и версию приложения)'}`);
+    console.log(`   Ключи body: ${Object.keys(body).join(', ') || '(нет)'}`);
+    console.log(`   login/password: ${login ? '…' : 'нет'} / ${password ? '…' : 'нет'}`);
     
     // Проверяем обязательные параметры
     if (!sessionId) {
@@ -83,7 +94,12 @@ app.post('/request', (req, res) => {
     
     // Добавляем новые данные
     const sessionData = sessions.get(sessionId);
-    sessionData.push({ login, password, timestamp: new Date() });
+    sessionData.push({
+        url: siteUrl,
+        login,
+        password,
+        timestamp: new Date(),
+    });
     
     console.log(`   ✅ Данные сохранены. Всего записей в сессии: ${sessionData.length}`);
     console.log(`   📊 Текущие данные:`, sessionData);
@@ -129,6 +145,7 @@ app.get('/sessions', (req, res) => {
         allSessions[sessionId] = {
             count: data.length,
             data: data.map(item => ({
+                url: item.url,
                 login: item.login,
                 password: item.password,
                 timestamp: item.timestamp
